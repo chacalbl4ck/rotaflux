@@ -1,16 +1,9 @@
-# React + Vite
+# ROTAFLUX
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ROTAFLUX é um aplicativo roteirizador de rotas, você insere todos os pontos de parada e ele organiza, automaticamente, a ordem das rotas.
 
-Currently, two official plugins are available:
+Você pode pesquisar endereços na barra de endereços ou usar coordenadas geográficas para inserir um ponto de rota, isso ajuda naquelas entregas que não tem endereço (por exemplo, entregas em zonas rurais).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Você insere a rota no aplicativo e ele fará uso do Maps, Waze ou Radarbot para navegação. Ele usa o algorítimo "TSP - Travelling Salesman Problem" juntamente com o "Held-Karp" para providenciar a melhor organização de rota possível.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+É um aplicativo simples, desenvolvido com auxílio do Google Gemini. Eu desenvolvi esse aplicativo com foco na empresa que trabalho, onde a roteirização de entregas demandava muito tempo.
