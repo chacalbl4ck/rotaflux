@@ -12,6 +12,8 @@ Você pode pesquisar endereços na barra de endereços ou usar coordenadas geogr
 
 Você insere a rota no aplicativo e ele fará uso do Maps, Waze ou Radarbot para navegação. Ele usa os algorítimos "TSP - Travelling Salesman Problem", "Held-Karp", "Vizinho próximo" e "Kyng" para providenciar a melhor organização de rota possível.
 
+Possui função de criar e salvas rotas para serem usadas depois.
+
 É um aplicativo simples, desenvolvido com auxílio do Google Gemini. Eu desenvolvi esse aplicativo como iniciante com foco na empresa que trabalho, onde a roteirização de entregas demandava muito tempo.
 
 
