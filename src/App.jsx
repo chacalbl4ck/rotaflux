@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, MapPin, Navigation, Trash2, Menu, X, CheckCircle, Search, Layers, Settings, AlertTriangle, Info, Car, Bike, Truck, Bus, Heart, Wifi, WifiOff, CloudRain, FileText, Save, GripVertical, ArrowLeft, Locate, Navigation2, Calculator, Loader2, Radiation, Share2, FileJson, Filter } from 'lucide-react';
+import { Plus, MapPin, Navigation, Trash2, Menu, X, CheckCircle, Search, Layers, Settings, AlertTriangle, Info, Car, Bike, Truck, Bus, Heart, Wifi, WifiOff, CloudRain, FileText, Save, GripVertical, ArrowLeft, Locate, Navigation2, Calculator, Loader2, Radiation, Share2, FileJson, Filter, FolderHeart, Play } from 'lucide-react';
 
 const RouteOptimizer = {
     getDistance: (lat1, lon1, lat2, lon2) => {
@@ -135,7 +135,6 @@ const RouteOptimizer = {
 const TAILWIND_CDN = "https://cdn.tailwindcss.com"; 
 const SORTABLE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"; 
 
-// Melhoria implementada: Expandido para 50 cores distintas para diferenciar cidades
 const CITY_COLORS = [
     'border-l-red-500', 'border-l-orange-500', 'border-l-amber-500', 'border-l-yellow-500', 'border-l-lime-500',
     'border-l-green-500', 'border-l-emerald-500', 'border-l-teal-500', 'border-l-cyan-500', 'border-l-sky-500',
@@ -177,6 +176,7 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false); 
   const [showSettings, setShowSettings] = useState(false); 
   const [showLogsModal, setShowLogsModal] = useState(false); 
+  const [showSavedRoutesModal, setShowSavedRoutesModal] = useState(false);
   const [noteModal, setNoteModal] = useState({ isOpen: false, stopId: null, text: '', stopName: '' }); 
   const [toastMessage, setToastMessage] = useState(null);
   
@@ -193,6 +193,7 @@ export default function App() {
   const [totalDistance, setTotalDistance] = useState(0);
   const [availableLogs, setAvailableLogs] = useState([]);
   const [selectedLogIds, setSelectedLogIds] = useState([]);
+  const [savedRoutes, setSavedRoutes] = useState([]);
 
   const listRef = useRef(null); 
   const searchTimeoutRef = useRef(null);
@@ -303,6 +304,7 @@ export default function App() {
   useEffect(() => {
     const savedStops = localStorage.getItem('rotaflux_stops');
     const savedConfig = localStorage.getItem('rotaflux_config');
+    const savedRoutesData = localStorage.getItem('rotaflux_saved_routes');
     try {
         if (savedStops) {
             const parsed = JSON.parse(savedStops);
@@ -315,6 +317,9 @@ export default function App() {
             const config = JSON.parse(savedConfig);
             if (config) setVehicleConfig(config);
         }
+        if (savedRoutesData) {
+            setSavedRoutes(JSON.parse(savedRoutesData));
+        }
     } catch (e) {
         logAction("Aviso: Falha ao carregar dados salvos. Iniciando limpo.");
     }
@@ -322,6 +327,7 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('rotaflux_stops', JSON.stringify(stops)); }, [stops]);
   useEffect(() => { localStorage.setItem('rotaflux_config', JSON.stringify(vehicleConfig)); }, [vehicleConfig]);
+  useEffect(() => { localStorage.setItem('rotaflux_saved_routes', JSON.stringify(savedRoutes)); }, [savedRoutes]);
 
   useEffect(() => {
       if (stops.length > 0 && userLocation) {
@@ -413,6 +419,44 @@ export default function App() {
             setIsOptimizing(false);
         }
     }, 500);
+  };
+
+  const handleSaveCurrentRoute = () => {
+      if (stops.length === 0) {
+          setToastMessage("Lista vazia. Adicione paradas primeiro.");
+          return;
+      }
+      const routeName = window.prompt("Dê um nome para esta rota:");
+      if (routeName && routeName.trim() !== "") {
+          const newRoute = {
+              id: Date.now(),
+              name: routeName,
+              date: new Date().toLocaleString(),
+              stops: [...stops]
+          };
+          setSavedRoutes([...savedRoutes, newRoute]);
+          setToastMessage("Rota salva com sucesso!");
+          logAction(`Rota '${routeName}' salva nas rotas planejadas.`);
+      }
+  };
+
+  const handleLoadRoute = (route) => {
+      if (stops.length > 0) {
+          if (!window.confirm("Isso substituirá a rota atual. Deseja continuar?")) {
+              return;
+          }
+      }
+      setStops(route.stops);
+      setShowSavedRoutesModal(false);
+      setToastMessage(`Rota '${route.name}' carregada!`);
+      logAction(`Rota planejada '${route.name}' carregada.`);
+  };
+
+  const handleDeleteRoute = (routeId) => {
+      if (window.confirm("Tem certeza que deseja excluir esta rota salva?")) {
+          setSavedRoutes(savedRoutes.filter(r => r.id !== routeId));
+          logAction(`Rota salva excluída.`);
+      }
   };
 
   const handleCopyPix = () => {
@@ -581,16 +625,10 @@ export default function App() {
         displayName = mainPart;
         if (suburb) displayName += ` - ${suburb}`;
         
-        // Melhoria implementada: Cidade movida para o início do endereço
         if (city) {
              const cityClean = city.trim();
-             // Evita duplicação caso a cidade já esteja no texto (ex: busca genérica)
              if (!displayName.toLowerCase().includes(cityClean.toLowerCase())) {
                  displayName = `${cityClean} • ${displayName}`;
-             } else {
-                 // Se já estiver, tenta formatar para garantir o padrão "Cidade • Rua..."
-                 // Mas como o display name vem do Nominatim/Photon muitas vezes sujo, 
-                 // vamos confiar na concatenação simples se não houver duplicação óbvia
              }
         }
     }
@@ -837,6 +875,44 @@ export default function App() {
         </div>
       )}
 
+      {showSavedRoutesModal && (
+        <div className="fixed inset-0 z-[6001] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b flex justify-between items-center text-gray-800">
+                    <h2 className="font-bold flex items-center gap-2"><FolderHeart size={20} className="text-indigo-600"/> Rotas Planejadas</h2>
+                    <button onClick={() => setShowSavedRoutesModal(false)}><X size={24} className="text-gray-400"/></button>
+                </div>
+                <div className="p-4 overflow-y-auto flex-1 bg-gray-50 space-y-2">
+                    {savedRoutes.length === 0 && (
+                        <div className="text-center py-8 text-gray-400 flex flex-col items-center">
+                            <FolderHeart size={48} className="mb-2 opacity-20"/>
+                            <p>Nenhuma rota salva.</p>
+                        </div>
+                    )}
+                    {savedRoutes.map(route => (
+                        <div key={route.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:border-indigo-300 transition-colors">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <h3 className="font-bold text-gray-800">{route.name}</h3>
+                                    <p className="text-xs text-gray-500">{route.date}</p>
+                                </div>
+                                <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded-full">{route.stops.length} paradas</span>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                                <button onClick={() => handleLoadRoute(route)} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-transform">
+                                    <Play size={14} /> Carregar
+                                </button>
+                                <button onClick={() => handleDeleteRoute(route.id)} className="p-2 text-red-500 bg-red-50 rounded-lg hover:bg-red-100 active:scale-95 transition-transform">
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+             </div>
+        </div>
+      )}
+
       {showAbout && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full text-center relative animate-fade-in">
@@ -908,6 +984,7 @@ export default function App() {
             <button onClick={clearAllStops} className="p-2 text-red-500 rounded-full hover:bg-red-50 active:bg-red-100" title="Limpar Rota"><Trash2 size={20} /></button>
             <button onClick={() => setShowAbout(true)} className="p-2 text-gray-500 rounded-full hover:bg-gray-100"><Info size={20} /></button>
             <button onClick={() => setShowSettings(true)} className="p-2 text-gray-500 rounded-full hover:bg-gray-100"><Settings size={20} /></button>
+            <button onClick={() => setShowSavedRoutesModal(true)} className="p-2 text-indigo-600 bg-indigo-50 rounded-full hover:bg-indigo-100"><FolderHeart size={20} /></button>
         </div>
       </header>
       
@@ -1005,6 +1082,9 @@ export default function App() {
                     <span>{stops.length} paradas</span>
                 </div>
                 <div className="flex gap-3">
+                    <button onClick={handleSaveCurrentRoute} className="w-12 bg-white text-indigo-600 border border-indigo-100 rounded-xl flex items-center justify-center hover:bg-indigo-50 shadow-sm active:scale-95 transition-transform">
+                        <Save size={20} />
+                    </button>
                     <button onClick={optimizeRoute} disabled={isOptimizing || stops.length < 2} className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-white transition-all active:scale-[0.98] ${(isOptimizing || stops.length < 2) ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg'}`}>
                         {isOptimizing ? <>Calculando...</> : <><Layers size={20}/> Otimizar</>}
                     </button>
