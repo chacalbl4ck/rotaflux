@@ -135,10 +135,18 @@ const RouteOptimizer = {
 const TAILWIND_CDN = "https://cdn.tailwindcss.com"; 
 const SORTABLE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"; 
 
+// Melhoria implementada: Expandido para 50 cores distintas para diferenciar cidades
 const CITY_COLORS = [
-    'border-l-blue-500', 'border-l-red-500', 'border-l-green-500', 'border-l-yellow-500',
-    'border-l-purple-500', 'border-l-pink-500', 'border-l-indigo-500', 'border-l-orange-500',
-    'border-l-teal-500', 'border-l-cyan-500'
+    'border-l-red-500', 'border-l-orange-500', 'border-l-amber-500', 'border-l-yellow-500', 'border-l-lime-500',
+    'border-l-green-500', 'border-l-emerald-500', 'border-l-teal-500', 'border-l-cyan-500', 'border-l-sky-500',
+    'border-l-blue-500', 'border-l-indigo-500', 'border-l-violet-500', 'border-l-purple-500', 'border-l-fuchsia-500',
+    'border-l-pink-500', 'border-l-rose-500', 'border-l-slate-500', 'border-l-gray-500', 'border-l-zinc-500',
+    'border-l-neutral-500', 'border-l-stone-500', 'border-l-red-400', 'border-l-orange-400', 'border-l-amber-400',
+    'border-l-yellow-400', 'border-l-lime-400', 'border-l-green-400', 'border-l-emerald-400', 'border-l-teal-400',
+    'border-l-cyan-400', 'border-l-sky-400', 'border-l-blue-400', 'border-l-indigo-400', 'border-l-violet-400',
+    'border-l-purple-400', 'border-l-fuchsia-400', 'border-l-pink-400', 'border-l-rose-400', 'border-l-red-600',
+    'border-l-orange-600', 'border-l-amber-600', 'border-l-yellow-600', 'border-l-lime-600', 'border-l-green-600',
+    'border-l-emerald-600', 'border-l-teal-600', 'border-l-cyan-600', 'border-l-sky-600', 'border-l-blue-600'
 ];
 
 const useScript = (url) => {
@@ -573,8 +581,17 @@ export default function App() {
         displayName = mainPart;
         if (suburb) displayName += ` - ${suburb}`;
         
-        if (city && displayName.length < 30 && !displayName.includes(city)) {
-             displayName += ` (${city})`;
+        // Melhoria implementada: Cidade movida para o início do endereço
+        if (city) {
+             const cityClean = city.trim();
+             // Evita duplicação caso a cidade já esteja no texto (ex: busca genérica)
+             if (!displayName.toLowerCase().includes(cityClean.toLowerCase())) {
+                 displayName = `${cityClean} • ${displayName}`;
+             } else {
+                 // Se já estiver, tenta formatar para garantir o padrão "Cidade • Rua..."
+                 // Mas como o display name vem do Nominatim/Photon muitas vezes sujo, 
+                 // vamos confiar na concatenação simples se não houver duplicação óbvia
+             }
         }
     }
 
