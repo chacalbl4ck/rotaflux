@@ -1,11 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, MapPin, Navigation, Trash2, Menu, X, CheckCircle, Search, Layers, Settings, AlertTriangle, Info, Car, Bike, Truck, Bus, Heart, Wifi, WifiOff, CloudRain, FileText, Save, GripVertical, ArrowLeft, Locate, Navigation2, Calculator, Loader2, Radiation, Share2, FileJson } from 'lucide-react';
+import { Plus, MapPin, Navigation, Trash2, Menu, X, CheckCircle, Search, Layers, Settings, AlertTriangle, Info, Car, Bike, Truck, Bus, Heart, Wifi, WifiOff, CloudRain, FileText, Save, GripVertical, ArrowLeft, Locate, Navigation2, Calculator, Loader2, Radiation, Share2, FileJson, Filter } from 'lucide-react';
 
-/**
- * ==================================================================================
- * MÓDULO DE OTIMIZAÇÃO MATEMÁTICA (Heurísticas RSL / 2-Opt)
- * ==================================================================================
- */
 const RouteOptimizer = {
     getDistance: (lat1, lon1, lat2, lon2) => {
         if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
@@ -27,8 +22,8 @@ const RouteOptimizer = {
         }
         return totalDist;
     },
-    solve2Opt: (stops, startPoint) => {
-        let bestRoute = [...stops];
+    solve2Opt: (bestRouteInput, startPoint) => {
+        let bestRoute = [...bestRouteInput];
         let improved = true;
         let bestDistance = RouteOptimizer.calculateTotalDistance(bestRoute, startPoint);
         let iterations = 0;
@@ -72,17 +67,71 @@ const RouteOptimizer = {
             current = nextStop;
         }
         return RouteOptimizer.solve2Opt(initialRoute, startPoint);
+    },
+    kyngAlgorithm: (stops, startPoint) => {
+        if (!startPoint || stops.length < 1) return stops;
+        
+        let unvisited = [...stops];
+        let nearestToStart = 0;
+        let minDist = Infinity;
+        for(let i=0; i<unvisited.length; i++) {
+            const d = RouteOptimizer.getDistance(startPoint.lat, startPoint.lon, unvisited[i].lat, unvisited[i].lon);
+            if(d < minDist) {
+                minDist = d;
+                nearestToStart = i;
+            }
+        }
+        
+        let tour = [unvisited.splice(nearestToStart, 1)[0]];
+        
+        while (unvisited.length > 0) {
+            let bestInsertValue = Infinity;
+            let bestStopIndex = -1;
+            let bestPosition = -1;
+
+            for (let i = 0; i < unvisited.length; i++) {
+                const stopK = unvisited[i];
+                
+                const startCost = RouteOptimizer.getDistance(startPoint.lat, startPoint.lon, stopK.lat, stopK.lon) +
+                                  RouteOptimizer.getDistance(stopK.lat, stopK.lon, tour[0].lat, tour[0].lon) -
+                                  RouteOptimizer.getDistance(startPoint.lat, startPoint.lon, tour[0].lat, tour[0].lon);
+                
+                if (startCost < bestInsertValue) {
+                    bestInsertValue = startCost;
+                    bestStopIndex = i;
+                    bestPosition = 0;
+                }
+
+                for (let j = 0; j < tour.length - 1; j++) {
+                    const stopI = tour[j];
+                    const stopJ = tour[j + 1];
+                    const cost = RouteOptimizer.getDistance(stopI.lat, stopI.lon, stopK.lat, stopK.lon) +
+                                 RouteOptimizer.getDistance(stopK.lat, stopK.lon, stopJ.lat, stopJ.lon) -
+                                 RouteOptimizer.getDistance(stopI.lat, stopI.lon, stopJ.lat, stopJ.lon);
+                    
+                    if (cost < bestInsertValue) {
+                        bestInsertValue = cost;
+                        bestStopIndex = i;
+                        bestPosition = j + 1;
+                    }
+                }
+
+                const endCost = RouteOptimizer.getDistance(tour[tour.length - 1].lat, tour[tour.length - 1].lon, stopK.lat, stopK.lon);
+                if (endCost < bestInsertValue) {
+                    bestInsertValue = endCost;
+                    bestStopIndex = i;
+                    bestPosition = tour.length;
+                }
+            }
+
+            const [removedStop] = unvisited.splice(bestStopIndex, 1);
+            tour.splice(bestPosition, 0, removedStop);
+        }
+        
+        return RouteOptimizer.solve2Opt(tour, startPoint);
     }
 };
 
-/**
- * ==================================================================================
- * COMPONENTE PRINCIPAL
- * ==================================================================================
- */
-
-const LEAFLET_CDN_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-const LEAFLET_CDN_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 const TAILWIND_CDN = "https://cdn.tailwindcss.com"; 
 const SORTABLE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"; 
 
@@ -99,22 +148,12 @@ const useScript = (url) => {
     const script = document.createElement('script');
     script.src = url; script.async = true;
     script.onload = () => setLoaded(true);
-    // Melhoria implementada: Tratamento de erro no carregamento de scripts
     script.onerror = () => {
       console.error(`Erro crítico: Falha ao carregar recurso externo ${url}`);
     };
     document.body.appendChild(script);
   }, [url]);
   return loaded;
-};
-
-const useStyle = (url) => {
-  useEffect(() => {
-    if (document.querySelector(`link[href="${url}"]`)) return;
-    const link = document.createElement('link');
-    link.href = url; link.rel = 'stylesheet';
-    document.head.appendChild(link);
-  }, [url]);
 };
 
 export default function App() {
@@ -133,13 +172,15 @@ export default function App() {
   const [noteModal, setNoteModal] = useState({ isOpen: false, stopId: null, text: '', stopName: '' }); 
   const [toastMessage, setToastMessage] = useState(null);
   
-  const [vehicleConfig, setVehicleConfig] = useState({ type: 'car', plate: '', navApp: 'google', autoNav: false });
-  const [rodizioAlert, setRodizioAlert] = useState(null); 
+  const [vehicleConfig, setVehicleConfig] = useState({ navApp: 'google', autoNav: false, optimizationAlgo: 'kyng' }); 
   const [pixCopied, setPixCopied] = useState(false); 
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   
   const [gpsError, setGpsError] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+
+  const [filterCity, setFilterCity] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
 
   const [totalDistance, setTotalDistance] = useState(0);
   const [availableLogs, setAvailableLogs] = useState([]);
@@ -154,16 +195,13 @@ export default function App() {
       const timestamp = new Date();
       const timeString = timestamp.toLocaleTimeString();
       const logEntry = `[${timeString}] ${action}`;
-      // Melhoria implementada: Uso de log silenciado em produção opcionalmente, mantendo integridade solicitada
       console.log(`[ROTAFLUX] ${logEntry}`);
       try {
-          // Melhoria implementada: Validação de estrutura antes do parse
           const rawLogs = localStorage.getItem('rotaflux_logs');
           const storedLogs = rawLogs ? JSON.parse(rawLogs) : [];
           const sessionIndex = storedLogs.findIndex(l => l.id === currentSessionId.current);
           if (sessionIndex !== -1) {
               storedLogs[sessionIndex].entries.push(logEntry);
-              // Melhoria implementada: Limite preventivo de tamanho de string no localStorage
               localStorage.setItem('rotaflux_logs', JSON.stringify(storedLogs));
           }
       } catch (e) {
@@ -210,9 +248,27 @@ export default function App() {
     };
   }, []);
 
+  const uniqueCities = [...new Set(stops.map(s => s.city).filter(Boolean))].sort();
+  const isFilterActive = filterCity !== 'all' || filterStatus !== 'all';
+
+  const filteredStops = stops.filter(stop => {
+      const matchCity = filterCity === 'all' || stop.city === filterCity;
+      const matchStatus = filterStatus === 'all' 
+          ? true 
+          : filterStatus === 'completed' ? stop.completed : !stop.completed;
+      return matchCity && matchStatus;
+  });
+
   useEffect(() => {
+    if (isFilterActive) {
+        if (sortableInstance.current) {
+            sortableInstance.current.destroy();
+            sortableInstance.current = null;
+        }
+        return;
+    }
+
     if (sortableLoaded && listRef.current && !sortableInstance.current) {
-        // @ts-ignore
         sortableInstance.current = new window.Sortable(listRef.current, {
             animation: 150, handle: '.drag-handle', delay: 100, delayOnTouchOnly: true,
             onEnd: (evt) => {
@@ -228,19 +284,17 @@ export default function App() {
             },
         });
     }
-    // Melhoria implementada: Cleanup do sortableInstance
     return () => {
         if (sortableInstance.current) {
             sortableInstance.current.destroy();
             sortableInstance.current = null;
         }
     };
-  }, [sortableLoaded, stops.length]);
+  }, [sortableLoaded, stops.length, isFilterActive]);
 
   useEffect(() => {
     const savedStops = localStorage.getItem('rotaflux_stops');
     const savedConfig = localStorage.getItem('rotaflux_config');
-    // Melhoria implementada: Try/Catch nos carregamentos de storage
     try {
         if (savedStops) {
             const parsed = JSON.parse(savedStops);
@@ -262,7 +316,6 @@ export default function App() {
   useEffect(() => { localStorage.setItem('rotaflux_config', JSON.stringify(vehicleConfig)); }, [vehicleConfig]);
 
   useEffect(() => {
-      // Melhoria implementada: Cache do cálculo de distância para evitar overhead
       if (stops.length > 0 && userLocation) {
           const total = RouteOptimizer.calculateTotalDistance(stops, userLocation);
           setTotalDistance(total);
@@ -271,16 +324,12 @@ export default function App() {
       }
   }, [stops, userLocation]);
 
-  useEffect(() => { checkRodizio(); }, [vehicleConfig]);
-
   useEffect(() => {
       if (toastMessage) {
           const timer = setTimeout(() => setToastMessage(null), 3000);
           return () => clearTimeout(timer);
       }
   }, [toastMessage]);
-
-  // --- Funções Principais ---
 
   const requestUserLocation = () => {
       logAction("Solicitando localização GPS...");
@@ -329,17 +378,25 @@ export default function App() {
              logAction("Otimização iniciada usando 1ª parada como origem (sem GPS).");
         }
     } else {
-        logAction("Otimização iniciada a partir do GPS do usuário.");
+        logAction(`Otimização iniciada via algoritmo ${vehicleConfig.optimizationAlgo || 'padrão'}`);
     }
 
     setIsOptimizing(true);
     
     setTimeout(() => {
         try {
-            const optimizedStops = RouteOptimizer.optimize(stops, startPoint);
+            let optimizedStops;
+            if(vehicleConfig.optimizationAlgo === 'kyng') {
+                optimizedStops = RouteOptimizer.kyngAlgorithm(stops, startPoint);
+                logAction(`Algoritmo Kyng aplicado.`);
+            } else {
+                optimizedStops = RouteOptimizer.optimize(stops, startPoint);
+                logAction(`Algoritmo RSL/2-Opt aplicado.`);
+            }
+            
             setStops(optimizedStops);
             setToastMessage("Rota otimizada com sucesso!");
-            logAction(`Rota otimizada com sucesso. Total de paradas: ${optimizedStops.length}`);
+            logAction(`Rota finalizada com sucesso. Total de paradas: ${optimizedStops.length}`);
         } catch (e) {
             console.error(e);
             setToastMessage("Erro ao otimizar rota.");
@@ -348,32 +405,6 @@ export default function App() {
             setIsOptimizing(false);
         }
     }, 500);
-  };
-
-  const checkRodizio = () => {
-    if (!vehicleConfig.plate || vehicleConfig.type === 'moto') { 
-        if (rodizioAlert) logAction("Alerta de rodízio limpo.");
-        setRodizioAlert(null); 
-        return; 
-    }
-    const cleanPlate = vehicleConfig.plate.replace(/[^a-zA-Z0-9]/g, '');
-    const lastDigit = parseInt(cleanPlate.slice(-1));
-    if (isNaN(lastDigit)) return;
-
-    const day = new Date().getDay();
-    let restricted = false;
-    if (day === 1 && (lastDigit === 1 || lastDigit === 2)) restricted = true;
-    if (day === 2 && (lastDigit === 3 || lastDigit === 4)) restricted = true;
-    if (day === 3 && (lastDigit === 5 || lastDigit === 6)) restricted = true;
-    if (day === 4 && (lastDigit === 7 || lastDigit === 8)) restricted = true;
-    if (day === 5 && (lastDigit === 9 || lastDigit === 0)) restricted = true;
-
-    if (restricted) {
-        if (!rodizioAlert) logAction(`Alerta de rodízio ativado para final ${lastDigit}`);
-        setRodizioAlert({ msg: `Rodízio ATIVO final ${lastDigit}!`, detail: `Restrição Centro Expandido (07h-10h | 17h-20h).` });
-    } else { 
-        setRodizioAlert(null); 
-    }
   };
 
   const handleCopyPix = () => {
@@ -388,48 +419,50 @@ export default function App() {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     
     let cleanQ = q.trim();
+    if (!cleanQ) {
+        setSuggestions([]);
+        return;
+    }
 
-    // Detecção de coordenadas GPS
-    const coordRegex = /^(-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)$/;
+    const coordRegex = /^(-?\d+(\.\d+)?)[,\s]+(-?\d+(\.\d+)?)$/;
+    
     if (coordRegex.test(cleanQ)) {
         setIsSearching(true);
         searchTimeoutRef.current = setTimeout(async () => {
              try {
                  const match = cleanQ.match(coordRegex);
                  if (!match) return;
-                 const lat = parseFloat(match[1]);
-                 const lon = parseFloat(match[3]);
-                 let fullData = { lat, lon, display_name: `Coordenadas: ${lat}, ${lon}`, address: { city: 'GPS' } };
+                 const parts = cleanQ.split(/[,\s]+/).filter(p => p.trim() !== "");
+                 if(parts.length < 2) return;
+
+                 const lat = parseFloat(parts[0]);
+                 const lon = parseFloat(parts[1]);
+
+                 if(isNaN(lat) || isNaN(lon)) return;
+
+                 let fullData = { 
+                     lat, 
+                     lon, 
+                     display_name: `Coordenadas: ${lat}, ${lon}`, 
+                     address: { city: 'Localização GPS', road: 'Ponto no Mapa' } 
+                 };
+
                  if (!isOffline) {
                      try {
                         const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
                         const res = await fetch(url);
                         const data = await res.json();
                         if (!data.error) fullData = data;
-                     } catch (e) {}
+                     } catch (e) {
+                         console.warn("Erro no reverse geocoding:", e);
+                     }
                  }
                  setSuggestions([fullData]);
-                 logAction(`Coordenadas inseridas: ${lat}, ${lon}`);
+                 logAction(`Busca por coordenadas: ${lat}, ${lon}`);
              } finally { setIsSearching(false); }
-        }, 800);
+        }, 600);
         return;
     }
-
-    const replacements = [
-        { regex: /\bav\.?\b/gi, replacement: "Avenida" },
-        { regex: /\br\.?\b/gi, replacement: "Rua" },
-        { regex: /\bal\.?\b/gi, replacement: "Alameda" },
-        { regex: /\bpç\.?\b/gi, replacement: "Praça" },
-        { regex: /\bvla?\.?\b/gi, replacement: "Vila" },
-        { regex: /\bjd\.?\b/gi, replacement: "Jardim" },
-        { regex: /\best\.?\b/gi, replacement: "Estrada" },
-        { regex: /\brod\.?\b/gi, replacement: "Rodovia" },
-        { regex: /\bpsq\.?\b/gi, replacement: "Parque" },
-    ];
-    
-    replacements.forEach(({ regex, replacement }) => {
-        cleanQ = cleanQ.replace(regex, replacement);
-    });
     
     if (cleanQ.length < 3) return;
     
@@ -441,73 +474,107 @@ export default function App() {
             logAction("Busca cancelada: Offline.");
             return; 
         }
+
+        const numberMatch = cleanQ.match(/(?:,|\s)\s*(\d+)\s*$/);
+        const userTypedNumber = numberMatch ? numberMatch[1] : null;
         
-        const fetchNominatim = async (queryText, useViewbox = true) => {
-            let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryText)}&addressdetails=1&limit=5&accept-language=pt-BR`;
-            
-            const isCEP = /^\d{5}-?\d{3}$/.test(queryText);
-            
-            if (useViewbox && !isCEP && userLocation) {
-                 const lat = Number(userLocation.lat);
-                 const lon = Number(userLocation.lon);
-                 if (!isNaN(lat) && !isNaN(lon)) {
-                    url += `&viewbox=${(lon-0.5).toFixed(4)},${(lat+0.5).toFixed(4)},${(lon+0.5).toFixed(4)},${(lat-0.5).toFixed(4)}&bounded=0`;
-                 }
-            }
-            if (isCEP || queryText.toLowerCase().includes('municipio')) {
-                url += '&countrycodes=br';
+        const fetchNominatim = async (queryText) => {
+            let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryText)}&addressdetails=1&limit=5&countrycodes=br`;
+             if (userLocation) {
+                 const offset = 0.5; 
+                 url += `&viewbox=${(userLocation.lon-offset)},${(userLocation.lat+offset)},${(userLocation.lon+offset)},${(userLocation.lat-offset)}&bounded=0`;
             }
             const res = await fetch(url);
-            if (!res.ok) throw new Error("Erro API");
-            return await res.json();
+            const data = await res.json();
+            return data.map(item => ({
+                ...item,
+                user_input_number: userTypedNumber
+            }));
+        };
+
+        const fetchPhoton = async (queryText) => {
+            let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryText)}&limit=5&lang=pt`;
+            if (userLocation) {
+                 url += `&lat=${userLocation.lat}&lon=${userLocation.lon}`;
+            }
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Photon Error");
+            const data = await res.json();
+            
+            return data.features.map(f => {
+                const props = f.properties;
+                let shortName = props.name || props.street || '';
+                if (props.housenumber) shortName += `, ${props.housenumber}`;
+                else if (userTypedNumber) shortName += `, ${userTypedNumber}`;
+                
+                if (props.district || props.suburb) shortName += ` - ${props.district || props.suburb}`;
+                if (props.city) shortName += ` (${props.city})`;
+
+                return {
+                    lat: f.geometry.coordinates[1],
+                    lon: f.geometry.coordinates[0],
+                    display_name: shortName,
+                    address: {
+                        road: props.street || props.name,
+                        house_number: props.housenumber,
+                        suburb: props.district || props.suburb,
+                        city: props.city || props.town || props.village,
+                        state: props.state
+                    },
+                    user_input_number: userTypedNumber,
+                    raw_data: f
+                };
+            });
         };
 
         try {
-            let data = await fetchNominatim(cleanQ);
-
-            if (data.length === 0) {
-                 const noAccents = cleanQ.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                 if (noAccents !== cleanQ) {
-                     data = await fetchNominatim(noAccents);
-                 }
+            let results = [];
+            
+            try {
+                results = await fetchPhoton(cleanQ);
+            } catch (e) {
+                console.warn("Photon failed, trying Nominatim", e);
             }
 
-            if (data.length === 0) {
-                 data = await fetchNominatim(cleanQ, false);
+            if (!results || results.length === 0) {
+                results = await fetchNominatim(cleanQ);
             }
             
-            setSuggestions(data);
+            setSuggestions(results);
         } catch (error) { 
-            console.warn("Erro busca", error);
-            logAction(`Erro na busca: ${error.message}`);
+            console.warn("All search providers failed", error);
+            logAction(`Erro busca: ${error.message}`);
         } finally {
             setIsSearching(false);
         }
-    }, 800);
+    }, 600);
   };
 
   const addStop = (place) => {
     let displayName = place.display_name;
     let cityName = '';
     
-    if (place.address) {
-        const road = place.address.road || place.address.street || place.address.pedestrian;
-        const number = place.address.house_number;
-        const suburb = place.address.suburb || place.address.neighbourhood;
-        const city = place.address.city || place.address.town || place.address.municipality;
+    if (place.address || place.user_input_number) {
+        const road = place.address?.road || place.address?.street || place.display_name.split(',')[0];
+        const number = place.address?.house_number || place.address?.housenumber || place.user_input_number;
+        const suburb = place.address?.suburb || place.address?.district || place.address?.neighbourhood;
+        const city = place.address?.city || place.address?.town || place.address?.municipality || place.address?.village;
         
-        const rawName = place.display_name.split(',')[0]; 
+        let mainPart = road || "";
+        if (number) mainPart += `, ${number}`;
         
-        cityName = city || ''; 
-        let addressPart = road ? `${road}${number ? ', ' + number : ''}` : rawName;
-        if (suburb && road) addressPart += ` - ${suburb}`;
+        if (!mainPart && place.display_name) {
+            mainPart = place.display_name.split('-')[0].split(',')[0].trim();
+            if (number) mainPart += `, ${number}`;
+        }
+
+        cityName = city || '';
         
-        if (rawName && road && rawName !== road) {
-            displayName = `${rawName} • ${addressPart}`;
-        } else if (city) {
-            displayName = `${city.toUpperCase()} • ${addressPart}`;
-        } else {
-            displayName = addressPart;
+        displayName = mainPart;
+        if (suburb) displayName += ` - ${suburb}`;
+        
+        if (city && displayName.length < 30 && !displayName.includes(city)) {
+             displayName += ` (${city})`;
         }
     }
 
@@ -531,7 +598,7 @@ export default function App() {
         if (nextStop) {
             setToastMessage(`Abrindo GPS em 1s...`);
             logAction("Auto-navegação acionada para próxima parada.");
-            setTimeout(() => openNavigation(nextStop.lat, nextStop.lon), 1000);
+            setTimeout(() => openNavigation(nextStop.lat, nextStop.lon, nextStop.display_name), 1000);
         } else { 
             setToastMessage("Rota concluída!"); 
             logAction("Rota concluída (sem mais paradas).");
@@ -539,10 +606,12 @@ export default function App() {
     }
   };
 
-  const openNavigation = (lat, lon) => {
+  const openNavigation = (lat, lon, address = null) => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    logAction(`Iniciando navegação para ${lat.toFixed(5)}, ${lon.toFixed(5)} usando ${vehicleConfig.navApp}`);
+    logAction(`Iniciando navegação para ${address || lat} usando ${vehicleConfig.navApp}`);
     
+    const destination = address ? encodeURIComponent(address) : `${lat},${lon}`;
+
     if (vehicleConfig.navApp === 'radarbot') {
         if (isMobile) {
             window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
@@ -550,15 +619,15 @@ export default function App() {
             window.open(`https://www.radarbot.com`, '_blank');
         }
     } else if (vehicleConfig.navApp === 'waze') {
-        if (isMobile) window.location.href = `waze://?ll=${lat},${lon}&navigate=yes`;
-        else window.open(`https://waze.com/ul?ll=${lat},${lon}&navigate=yes`, '_blank');
+        if (isMobile) window.location.href = `waze://?q=${destination}&navigate=yes`;
+        else window.open(`https://waze.com/ul?q=${destination}&navigate=yes`, '_blank');
     } else {
         if (isMobile) {
             const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-            if (isIOS) window.location.href = `maps:?daddr=${lat},${lon}&dirflg=d`;
-            else window.location.href = `google.navigation:q=${lat},${lon}`;
+            if (isIOS) window.location.href = `maps:?daddr=${destination}&dirflg=d`;
+            else window.location.href = `google.navigation:q=${destination}`;
         } else {
-            window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`, '_blank');
         }
     }
   };
@@ -780,20 +849,17 @@ export default function App() {
 
       {showSettings && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full relative max-h-[90vh] overflow-y-auto text-gray-800">
-                <button onClick={() => setShowSettings(false)} className="absolute top-2 right-2 p-2 hover:bg-gray-100 rounded-full text-gray-400"><X size={24} /></button>
-                <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Settings size={24} className="text-gray-500" /> Configurações</h2>
+            <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl text-gray-800">
+                <h2 className="font-bold mb-4 flex gap-2"><Settings size={24} className="text-gray-500" /> Configurações</h2>
                 <div className="space-y-5">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Veículo</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => setVehicleConfig({...vehicleConfig, type: 'car'})} className={`flex flex-col items-center justify-center p-3 rounded-lg border ${vehicleConfig.type === 'car' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}><Car size={24} className="mb-1"/><span className="text-[12px]">Carro</span></button>
-                            <button onClick={() => setVehicleConfig({...vehicleConfig, type: 'moto'})} className={`flex flex-col items-center justify-center p-3 rounded-lg border ${vehicleConfig.type === 'moto' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}><Bike size={24} className="mb-1"/><span className="text-[12px]">Moto</span></button>
-                            <button onClick={() => setVehicleConfig({...vehicleConfig, type: 'truck'})} className={`flex flex-col items-center justify-center p-3 rounded-lg border ${vehicleConfig.type === 'truck' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}><Truck size={24} className="mb-1"/><span className="text-[12px]">Caminhão</span></button>
-                            <button onClick={() => setVehicleConfig({...vehicleConfig, type: 'bus'})} className={`flex flex-col items-center justify-center p-3 rounded-lg border ${vehicleConfig.type === 'bus' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}><Bus size={24} className="mb-1"/><span className="text-[12px]">Ônibus</span></button>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Algoritmo de Rota</label>
+                        <div className="flex gap-2">
+                             <button onClick={() => setVehicleConfig({...vehicleConfig, optimizationAlgo: 'standard'})} className={`flex-1 py-2 text-xs font-bold border rounded-lg transition-all ${vehicleConfig.optimizationAlgo === 'standard' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-white'}`}>Vizinho Próximo</button>
+                             <button onClick={() => setVehicleConfig({...vehicleConfig, optimizationAlgo: 'kyng'})} className={`flex-1 py-2 text-xs font-bold border rounded-lg transition-all ${vehicleConfig.optimizationAlgo === 'kyng' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-white'}`}>Kyng (Inserção)</button>
                         </div>
                     </div>
-                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Placa</label><input type="text" maxLength={8} placeholder="ABC-1234" className="w-full px-4 py-3 border border-gray-300 rounded-lg uppercase bg-white text-gray-900" value={vehicleConfig.plate} onChange={(e) => setVehicleConfig({...vehicleConfig, plate: e.target.value.toUpperCase()})} /></div>
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">App Navegação</label>
                         <div className="flex gap-2">
@@ -827,14 +893,11 @@ export default function App() {
             <button onClick={() => setShowSettings(true)} className="p-2 text-gray-500 rounded-full hover:bg-gray-100"><Settings size={20} /></button>
         </div>
       </header>
-
-      {rodizioAlert && <div className="bg-red-50 border-b border-red-100 px-4 py-3 flex items-start gap-3 z-20 animate-fade-in flex-none"><AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={20} /><div><p className="text-sm font-bold text-red-700">{rodizioAlert.msg}</p><p className="text-xs text-red-600">{rodizioAlert.detail}</p></div></div>}
-
+      
       <div className="flex flex-1 relative overflow-hidden bg-gray-50 flex-col">
             <div className="p-4 border-b border-gray-100 bg-white flex-none z-30">
                 <div className="relative">
                     <Search className="absolute left-3 top-3.5 text-gray-400" size={20} />
-                    {/* Melhoria implementada: Forçar cores para evitar problemas de contraste em temas do sistema */}
                     <input type="text" placeholder="Local, Endereço ou Coords..." className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none text-base bg-white text-gray-900 shadow-sm" value={query} onChange={(e) => { setQuery(e.target.value); searchAddress(e.target.value); }} />
                     {isSearching && <div className="absolute right-3 top-3.5"><Loader2 className="animate-spin text-indigo-600" size={20}/></div>}
                 </div>
@@ -851,39 +914,63 @@ export default function App() {
                 )}
             </div>
 
+            <div className="flex-none flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-100 overflow-x-auto whitespace-nowrap z-20 no-scrollbar">
+                <Filter size={16} className="text-gray-400 shrink-0" />
+                
+                <select 
+                    value={filterCity} 
+                    onChange={(e) => setFilterCity(e.target.value)}
+                    className="text-xs border border-gray-300 rounded-full px-2 py-1 bg-white outline-none focus:border-indigo-500 text-gray-700 max-w-[130px] truncate"
+                >
+                    <option value="all">Todas as Cidades</option>
+                    {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                <div className="h-4 w-px bg-gray-300 mx-1 shrink-0"></div>
+
+                <div className="flex bg-gray-100 rounded-full p-0.5 shrink-0">
+                    <button onClick={() => setFilterStatus('all')} className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all ${filterStatus === 'all' ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>Todos</button>
+                    <button onClick={() => setFilterStatus('completed')} className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all ${filterStatus === 'completed' ? 'bg-green-500 shadow text-white' : 'text-gray-500 hover:text-gray-700'}`}>Feitos</button>
+                    <button onClick={() => setFilterStatus('pending')} className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all ${filterStatus === 'pending' ? 'bg-white shadow text-orange-500' : 'text-gray-500 hover:text-gray-700'}`}>Pendentes</button>
+                </div>
+            </div>
+
             <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 bg-gray-50 pb-24 z-0">
-                {stops.length === 0 ? (
+                {filteredStops.length === 0 ? (
                     <div className="text-center p-8 text-gray-400 flex flex-col items-center justify-center h-full">
                         <MapPin size={48} className="mb-4 opacity-20"/>
-                        <p className="text-lg font-medium text-gray-500">Nenhuma parada definida</p>
-                        <p className="text-sm mt-1">Busque locais ou coordenadas acima</p>
+                        <p className="text-lg font-medium text-gray-500">Nenhuma parada encontrada</p>
+                        <p className="text-sm mt-1">Ajuste os filtros ou adicione locais</p>
                     </div>
                 ) : (
-                    stops.map((stop, index) => {
+                    filteredStops.map((stop, index) => {
                         let dist = 0;
                         if (index === 0 && userLocation) {
                             dist = RouteOptimizer.getDistance(userLocation.lat, userLocation.lon, stop.lat, stop.lon);
                         } else if (index > 0) {
-                            const prev = stops[index - 1];
+                            const prev = filteredStops[index - 1]; 
                             dist = RouteOptimizer.getDistance(prev.lat, prev.lon, stop.lat, stop.lon);
                         }
 
+                        const originalIndex = stops.findIndex(s => s.id === stop.id);
+
                         return (
                         <div key={stop.id} className={`group relative flex items-center p-4 bg-white rounded-xl border border-gray-200 shadow-sm transition-all border-l-4 ${getCityColor(stop.city)}`}>
-                            <div className="drag-handle mr-3 cursor-move p-2 text-gray-300 active:text-indigo-600"><GripVertical size={24} /></div>
-                            <div className="mr-3 flex flex-col items-center gap-1">
-                                <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${stop.completed ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'}`}>{index + 1}</span>
+                            {!isFilterActive && (
+                                <div className="drag-handle mr-3 cursor-move p-2 text-gray-300 active:text-indigo-600"><GripVertical size={24} /></div>
+                            )}
+                            <div className={`mr-3 flex flex-col items-center gap-1 ${isFilterActive ? 'pl-2' : ''}`}>
+                                <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${stop.completed ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'}`}>{originalIndex + 1}</span>
                                 <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap">+{formatDistance(dist)}</span>
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className={`text-sm font-medium break-words leading-tight ${stop.completed ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{stop.display_name}</p>
-                                {rodizioAlert && <p className="text-[10px] text-red-500 font-bold mt-1 flex items-center gap-1 animate-pulse"><AlertTriangle size={10} /> Restrição no local</p>}
                                 {stop.notes && <div onClick={() => openNoteModal(stop)} className="text-xs text-gray-600 bg-yellow-50 p-2 rounded mt-1 border border-yellow-100 cursor-pointer flex items-start gap-1"><FileText size={12} className="shrink-0 mt-0.5 text-yellow-600"/><span className="italic">{stop.notes}</span></div>}
                             </div>
                             <div className="flex flex-col items-center gap-3 ml-3">
                                 <div className="flex gap-3">
                                     <button onClick={() => toggleComplete(stop.id)} className={`p-2 rounded-lg active:scale-95 transition-transform ${stop.completed ? 'text-green-600 bg-green-100' : 'text-gray-400 hover:text-green-600 hover:bg-gray-100'}`}><CheckCircle size={24} /></button>
-                                    <button onClick={() => openNavigation(stop.lat, stop.lon)} className={`p-2 rounded-lg transition-colors active:scale-95 ${vehicleConfig.navApp === 'waze' ? 'text-blue-400 hover:text-blue-600 hover:bg-blue-50' : (vehicleConfig.navApp === 'radarbot' ? 'text-orange-500 hover:text-orange-700 hover:bg-orange-50' : 'text-green-600 hover:bg-green-50')}`}><Navigation size={24} /></button>
+                                    <button onClick={() => openNavigation(stop.lat, stop.lon, stop.display_name)} className={`p-2 rounded-lg transition-colors active:scale-95 ${vehicleConfig.navApp === 'waze' ? 'text-blue-400 hover:text-blue-600 hover:bg-blue-50' : (vehicleConfig.navApp === 'radarbot' ? 'text-orange-500 hover:text-orange-700 hover:bg-orange-50' : 'text-green-600 hover:bg-green-50')}`}><Navigation size={24} /></button>
                                 </div>
                                 <div className="flex gap-3">
                                     <button onClick={() => openNoteModal(stop)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-lg active:scale-95"><FileText size={20} /></button>
