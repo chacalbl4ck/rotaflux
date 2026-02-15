@@ -1,8 +1,9 @@
 # ROTAFLUX
 | Imagem 1 | Imagem 2 |
 | :---: | :---: |
-| <img width="500" height="1083" alt="image" src="https://github.com/user-attachments/assets/c4363e77-9866-44fa-aa3a-30a01ee3bf61" /> | <img width="500" height="1083" alt="image" src="https://github.com/user-attachments/assets/35ba1497-6f29-45e0-8eca-bba95c695d5f" /> |
-| <img width="500" height="1083" alt="image" src="https://github.com/user-attachments/assets/1d18bb0b-1f83-487f-bd36-4ec8d6780aa6" /> | <img width="500" height="1083" alt="image" src="https://github.com/user-attachments/assets/4d6f3003-38b1-4434-beba-2fafba155f13" /> |
+| <img width="300" height="650" alt="image" src="https://github.com/user-attachments/assets/c4363e77-9866-44fa-aa3a-30a01ee3bf61" /> | <img width="300" height="650" alt="image" src="https://github.com/user-attachments/assets/35ba1497-6f29-45e0-8eca-bba95c695d5f" /> |
+| Imagem 3 | Imagem 4 |
+| <img width="300" height="650" alt="image" src="https://github.com/user-attachments/assets/1d18bb0b-1f83-487f-bd36-4ec8d6780aa6" /> | <img width="300" height="650" alt="image" src="https://github.com/user-attachments/assets/4d6f3003-38b1-4434-beba-2fafba155f13" /> |
 
 
 ROTAFLUX é um aplicativo roteirizador de rotas, você insere todos os pontos de parada e ele organiza, automaticamente, a ordem das rotas.
